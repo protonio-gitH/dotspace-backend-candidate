@@ -2,6 +2,9 @@ import { NextFunction, Request, Response } from 'express';
 import { Event, Registration } from '../models';
 import { presentOldEvent } from '../legacy/event-presenter';
 
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 export async function listEvents(
   _req: Request,
   res: Response,
@@ -34,6 +37,14 @@ export async function getEvent(
 ): Promise<void> {
   try {
     const eventId = req.params.eventId as string;
+
+    if (!UUID_PATTERN.test(eventId)) {
+      res.status(400).json({
+        error: { code: 'INVALID_ID', message: 'Event ID must be a UUID' },
+      });
+      return;
+    }
+
     const event = await Event.findByPk(eventId);
 
     if (!event) {

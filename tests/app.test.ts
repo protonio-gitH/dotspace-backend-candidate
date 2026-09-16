@@ -68,6 +68,13 @@ describe('event API', () => {
       }),
     );
   });
+
+  it('returns 400 for a malformed event id', async () => {
+    const response = await request(app).get('/events/123');
+
+    expect(response.status).toBe(400);
+    expect(response.body.error.code).toBe('INVALID_ID');
+  });
 });
 
 describe('registration API', () => {
