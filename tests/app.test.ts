@@ -100,6 +100,40 @@ describe('registration API', () => {
     expect(await Registration.count()).toBe(1);
   });
 
+  it('keeps registrations idempotent for concurrent retries of the same user/event pair', async () => {
+    const [first, second] = await Promise.all([
+      request(app)
+        .post(`/events/${SEED_EVENT_IDS.singleSeat}/registrations`)
+        .send({ userId: seedUserId(1) }),
+      request(app)
+        .post(`/events/${SEED_EVENT_IDS.singleSeat}/registrations`)
+        .send({ userId: seedUserId(1) }),
+    ]);
+
+    expect([first.status, second.status]).toEqual(
+      expect.arrayContaining([200, 201]),
+    );
+    expect(await Registration.count()).toBe(1);
+    expect(first.body.registration?.id ?? second.body.registration?.id).toBeTruthy();
+  });
+
+  it('never exceeds capacity under concurrent registrations', async () => {
+    const responses = await Promise.all(
+      [seedUserId(1), seedUserId(2), seedUserId(3)].map((userId) =>
+        request(app)
+          .post(`/events/${SEED_EVENT_IDS.singleSeat}/registrations`)
+          .send({ userId }),
+      ),
+    );
+
+    const successful = responses.filter((response) => response.status === 201);
+    const rejected = responses.filter((response) => response.status === 409);
+
+    expect(successful).toHaveLength(1);
+    expect(rejected).toHaveLength(2);
+    expect(await Registration.count()).toBe(1);
+  });
+
   it('rejects a new participant when an event is full', async () => {
     const first = await request(app)
       .post(`/events/${SEED_EVENT_IDS.singleSeat}/registrations`)
@@ -130,5 +164,14 @@ describe('registration API', () => {
 
     expect(response.status).toBe(404);
     expect(response.body.error.code).toBe('USER_NOT_FOUND');
+  });
+
+    it('returns 400 for a malformed user id', async () => {
+    const response = await request(app)
+      .post(`/events/${SEED_EVENT_IDS.main}/registrations`)
+      .send({ userId: '123' });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error.code).toBe('INVALID_ID');
   });
 });
